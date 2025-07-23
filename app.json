@@ -20,6 +20,9 @@
       ],
       "package": "io.github.mattsays.rommandroid"
     },
+    "ios": {
+      "bundleIdentifier": "app.anzhi.romm"
+    },
     "plugins": [
       "expo-router",
       "expo-file-system",
