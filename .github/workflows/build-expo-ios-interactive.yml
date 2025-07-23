@@ -89,7 +89,6 @@ jobs:
           eas build --platform ios \
             --profile $PROFILE \
             --local \
-            --interactive \
             --clear-cache \
             --output ${{ github.workspace }}/app-release.ipa
         env:
