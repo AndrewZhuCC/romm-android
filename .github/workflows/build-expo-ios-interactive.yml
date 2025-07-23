@@ -1,0 +1,102 @@
+name: iOS App Release Build Interactive
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      build_profile:
+        description: 'Build Profile'
+        required: true
+        default: 'preview'
+        type: choice
+        options:
+          - preview
+          - production
+
+jobs:
+  build:
+    runs-on: macos-latest
+    env:
+      # Optimize Node.js builds
+      NODE_OPTIONS: "--max-old-space-size=4096"
+      # Enable build cache
+      EAS_BUILD_AUTOCOMMIT: "1"
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🏗️ Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: |
+          # Check if node_modules is cached and up to date
+          if [ -d "node_modules" ] && [ -f "package-lock.json" ]; then
+            echo "📋 Checking if dependencies are up to date..."
+            npm ls --depth=0 > /dev/null 2>&1 && {
+              echo "✅ Dependencies are up to date, skipping install"
+              exit 0
+            } || echo "🔄 Dependencies need update, proceeding with install..."
+          fi
+          
+          echo "📦 Installing dependencies..."
+          npm ci --prefer-offline --no-audit
+
+      - name: 📋 Cache Expo CLI
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.npm/_npx
+            ~/.cache/yarn
+            ~/.expo
+          key: expo-${{ runner.os }}-${{ hashFiles('**/package-lock.json', '**/yarn.lock') }}
+          restore-keys: |
+            expo-${{ runner.os }}-
+
+      - name: 📋 Cache EAS Build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.eas
+            ./.eas-build-cache
+          key: eas-build-${{ runner.os }}-${{ hashFiles('**/eas.json', '**/app.json', '**/package.json') }}
+          restore-keys: |
+            eas-build-${{ runner.os }}-
+
+      - name: 🏗️ Setup Expo
+        uses: expo/expo-github-action@v8
+        with:
+          expo-version: latest
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Build iOS app
+        run: |
+          
+          # Determine build profile
+          if [ "${{ github.event_name }}" = "release" ]; then
+            PROFILE="production"
+            echo "🎯 Building PRODUCTION build for release"
+          else
+            PROFILE="${{ inputs.build_profile || 'preview' }}"
+            echo "🎯 Building $PROFILE build (manual trigger)"
+          fi
+          
+          eas build --platform ios \
+            --profile $PROFILE \
+            --local \
+            --interactive \
+            --clear-cache \
+            --output ${{ github.workspace }}/app-release.ipa
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release
+          path: ${{ github.workspace }}/app-release.ipa
